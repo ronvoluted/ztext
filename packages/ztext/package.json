@@ -1,0 +1,11 @@
+{
+  "name": "ztext",
+  "version": "1.0.1",
+  "type": "module",
+  "main": "dist/ztext.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "bun run scripts/build.ts",
+    "test": "bun test"
+  }
+}
