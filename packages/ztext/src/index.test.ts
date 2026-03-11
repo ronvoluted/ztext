@@ -22,6 +22,19 @@ function createElement(attrs: Record<string, string> = {}): HTMLElement {
 	return el;
 }
 
+function spyOnEventListeners(): {
+	calls: string[];
+	restore: () => void;
+} {
+	const original = globalThis.window.addEventListener;
+	const calls: string[] = [];
+	globalThis.window.addEventListener = function (type: string, ...args: any[]) {
+		calls.push(type);
+		return original.call(this, type, ...args);
+	} as typeof window.addEventListener;
+	return { calls, restore: () => (globalThis.window.addEventListener = original) };
+}
+
 describe("Ztextify", () => {
 	beforeEach(() => {
 		document.body.innerHTML = "";
@@ -515,85 +528,55 @@ describe("Ztextify — event listeners", () => {
 
 	it("registers mousemove listener for pointer event", () => {
 		const el = createElement();
-		const addEventSpy = globalThis.window.addEventListener;
-		const calls: string[] = [];
-		globalThis.window.addEventListener = function (type: string, ...args: any[]) {
-			calls.push(type);
-			return addEventSpy.call(this, type, ...args);
-		} as typeof window.addEventListener;
+		const spy = spyOnEventListeners();
 
 		new Ztextify(el, { event: "pointer", layers: 2 });
 
-		expect(calls).toContain("mousemove");
-		expect(calls).toContain("touchmove");
-
-		globalThis.window.addEventListener = addEventSpy;
+		expect(spy.calls).toContain("mousemove");
+		expect(spy.calls).toContain("touchmove");
+		spy.restore();
 	});
 
 	it("registers scroll listener for scroll event", () => {
 		const el = createElement();
-		const addEventSpy = globalThis.window.addEventListener;
-		const calls: string[] = [];
-		globalThis.window.addEventListener = function (type: string, ...args: any[]) {
-			calls.push(type);
-			return addEventSpy.call(this, type, ...args);
-		} as typeof window.addEventListener;
+		const spy = spyOnEventListeners();
 
 		new Ztextify(el, { event: "scroll", layers: 2 });
 
-		expect(calls).toContain("scroll");
-
-		globalThis.window.addEventListener = addEventSpy;
+		expect(spy.calls).toContain("scroll");
+		spy.restore();
 	});
 
 	it("registers scroll listener for scrollX event", () => {
 		const el = createElement();
-		const addEventSpy = globalThis.window.addEventListener;
-		const calls: string[] = [];
-		globalThis.window.addEventListener = function (type: string, ...args: any[]) {
-			calls.push(type);
-			return addEventSpy.call(this, type, ...args);
-		} as typeof window.addEventListener;
+		const spy = spyOnEventListeners();
 
 		new Ztextify(el, { event: "scrollX", layers: 2 });
 
-		expect(calls).toContain("scroll");
-
-		globalThis.window.addEventListener = addEventSpy;
+		expect(spy.calls).toContain("scroll");
+		spy.restore();
 	});
 
 	it("registers scroll listener for scrollY event", () => {
 		const el = createElement();
-		const addEventSpy = globalThis.window.addEventListener;
-		const calls: string[] = [];
-		globalThis.window.addEventListener = function (type: string, ...args: any[]) {
-			calls.push(type);
-			return addEventSpy.call(this, type, ...args);
-		} as typeof window.addEventListener;
+		const spy = spyOnEventListeners();
 
 		new Ztextify(el, { event: "scrollY", layers: 2 });
 
-		expect(calls).toContain("scroll");
-
-		globalThis.window.addEventListener = addEventSpy;
+		expect(spy.calls).toContain("scroll");
+		spy.restore();
 	});
 
 	it("does not register event listeners when event is 'none'", () => {
 		const el = createElement();
-		const addEventSpy = globalThis.window.addEventListener;
-		const calls: string[] = [];
-		globalThis.window.addEventListener = function (type: string, ...args: any[]) {
-			calls.push(type);
-			return addEventSpy.call(this, type, ...args);
-		} as typeof window.addEventListener;
+		const spy = spyOnEventListeners();
 
 		new Ztextify(el, { event: "none", layers: 2 });
 
-		expect(calls).not.toContain("mousemove");
-		expect(calls).not.toContain("touchmove");
-		expect(calls).not.toContain("scroll");
-
-		globalThis.window.addEventListener = addEventSpy;
+		expect(spy.calls).not.toContain("mousemove");
+		expect(spy.calls).not.toContain("touchmove");
+		expect(spy.calls).not.toContain("scroll");
+		spy.restore();
 	});
 });
 
@@ -634,18 +617,11 @@ describe("init — data attribute options", () => {
 			"data-z-layers": "2",
 		});
 
-		const addEventSpy = globalThis.window.addEventListener;
-		const calls: string[] = [];
-		globalThis.window.addEventListener = function (type: string, ...args: any[]) {
-			calls.push(type);
-			return addEventSpy.call(this, type, ...args);
-		} as typeof window.addEventListener;
-
+		const spy = spyOnEventListeners();
 		init();
 
-		expect(calls).toContain("mousemove");
-
-		globalThis.window.addEventListener = addEventSpy;
+		expect(spy.calls).toContain("mousemove");
+		spy.restore();
 	});
 
 	it("reads data-z-eventrotation attribute", () => {
@@ -781,5 +757,77 @@ describe("no 3D support", () => {
 			value: originalCSS,
 			writable: true,
 		});
+	});
+});
+
+describe("Ztextify — destroy", () => {
+	beforeEach(() => {
+		document.body.innerHTML = "";
+	});
+
+	it("removes pointer event listeners on destroy", () => {
+		const el = createElement();
+		const zt = new Ztextify(el, { event: "pointer", layers: 2 });
+
+		const removedTypes: string[] = [];
+		const originalRemove = globalThis.window.removeEventListener;
+		globalThis.window.removeEventListener = function (type: string, ...args: any[]) {
+			removedTypes.push(type);
+			return originalRemove.call(this, type, ...args);
+		} as typeof window.removeEventListener;
+
+		zt.destroy();
+
+		expect(removedTypes).toContain("mousemove");
+		expect(removedTypes).toContain("touchmove");
+
+		globalThis.window.removeEventListener = originalRemove;
+	});
+
+	it("removes scroll event listener on destroy", () => {
+		const el = createElement();
+		const zt = new Ztextify(el, { event: "scroll", layers: 2 });
+
+		const removedTypes: string[] = [];
+		const originalRemove = globalThis.window.removeEventListener;
+		globalThis.window.removeEventListener = function (type: string, ...args: any[]) {
+			removedTypes.push(type);
+			return originalRemove.call(this, type, ...args);
+		} as typeof window.removeEventListener;
+
+		zt.destroy();
+
+		expect(removedTypes).toContain("scroll");
+
+		globalThis.window.removeEventListener = originalRemove;
+	});
+
+	it("is safe to call destroy multiple times", () => {
+		const el = createElement();
+		const zt = new Ztextify(el, { event: "pointer", layers: 2 });
+
+		zt.destroy();
+		zt.destroy();
+
+		// No error thrown
+		expect(true).toBe(true);
+	});
+
+	it("does nothing when no event listeners were registered", () => {
+		const el = createElement();
+		const zt = new Ztextify(el, { event: "none", layers: 2 });
+
+		const removedTypes: string[] = [];
+		const originalRemove = globalThis.window.removeEventListener;
+		globalThis.window.removeEventListener = function (type: string, ...args: any[]) {
+			removedTypes.push(type);
+			return originalRemove.call(this, type, ...args);
+		} as typeof window.removeEventListener;
+
+		zt.destroy();
+
+		expect(removedTypes).toEqual([]);
+
+		globalThis.window.removeEventListener = originalRemove;
 	});
 });

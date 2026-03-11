@@ -38,17 +38,15 @@ function supports3d(): boolean {
 	if (typeof CSS === "undefined" || typeof CSS.supports !== "function") {
 		return false;
 	}
-	return (
-		CSS.supports("-moz-transform-style", "preserve-3d") ||
-		CSS.supports("-ms-transform-style", "preserve-3d") ||
-		CSS.supports("-webkit-transform-style", "preserve-3d") ||
-		CSS.supports("transform-style", "preserve-3d")
-	);
+	return CSS.supports("transform-style", "preserve-3d");
 }
 
-function zDraw(element: HTMLElement, options: ZtextOptions): void {
+function zDraw(
+	element: HTMLElement,
+	options: ZtextOptions,
+): Array<[string, EventListener]> {
 	const zEngaged = options.zEngaged ?? DEFAULTS.zEngaged;
-	if (zEngaged === false || zEngaged === "false") return;
+	if (zEngaged === false || zEngaged === "false") return [];
 
 	const depth = options.depth ?? DEFAULTS.depth;
 	const { numeral: depthNumeral, unit: depthUnit } = parseUnit(depth);
@@ -130,18 +128,26 @@ function zDraw(element: HTMLElement, options: ZtextOptions): void {
 		zLayers.style.transform = `rotateX(${yTilt}${unit}) rotateY(${xTilt}${unit})`;
 	}
 
+	const listeners: Array<[string, EventListener]> = [];
+
 	if (event === "pointer") {
-		window.addEventListener("mousemove", (e) => {
+		const onMouseMove = (e: MouseEvent) => {
 			const xPct = (e.clientX / window.innerWidth - 0.5) * 2;
 			const yPct = (e.clientY / window.innerHeight - 0.5) * 2;
 			tilt(xPct, yPct);
-		});
-
-		window.addEventListener("touchmove", (e) => {
+		};
+		const onTouchMove = (e: TouchEvent) => {
 			const xPct = (e.touches[0].clientX / window.innerWidth - 0.5) * 2;
 			const yPct = (e.touches[0].clientY / window.innerHeight - 0.5) * 2;
 			tilt(xPct, yPct);
-		});
+		};
+
+		window.addEventListener("mousemove", onMouseMove as EventListener);
+		window.addEventListener("touchmove", onTouchMove as EventListener);
+		listeners.push(
+			["mousemove", onMouseMove as EventListener],
+			["touchmove", onTouchMove as EventListener],
+		);
 	}
 
 	if (event === "scroll" || event === "scrollX" || event === "scrollY") {
@@ -165,10 +171,15 @@ function zDraw(element: HTMLElement, options: ZtextOptions): void {
 
 		zScroll();
 		window.addEventListener("scroll", zScroll);
+		listeners.push(["scroll", zScroll]);
 	}
+
+	return listeners;
 }
 
 export class Ztextify {
+	private listeners: Array<[string, EventListener]> = [];
+
 	constructor(
 		selector: string | HTMLElement,
 		options: ZtextOptions = {},
@@ -177,10 +188,19 @@ export class Ztextify {
 
 		if (typeof selector === "string") {
 			const elements = document.querySelectorAll<HTMLElement>(selector);
-			elements.forEach((el) => zDraw(el, options));
+			elements.forEach((el) => {
+				this.listeners.push(...zDraw(el, options));
+			});
 		} else {
-			zDraw(selector, options);
+			this.listeners.push(...zDraw(selector, options));
 		}
+	}
+
+	destroy(): void {
+		for (const [type, listener] of this.listeners) {
+			window.removeEventListener(type, listener);
+		}
+		this.listeners = [];
 	}
 }
 
