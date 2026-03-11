@@ -1,10 +1,12 @@
 import { describe, expect, it } from "bun:test";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
 const root = import.meta.dir;
 const ztextDist = resolve(root, "packages/ztext/dist");
 const demoBuild = resolve(root, "packages/demo/build");
+const demoBuildHtml = () =>
+	Bun.file(resolve(demoBuild, "index.html")).text();
 
 describe("end-to-end verification", () => {
 	describe("bun install", () => {
@@ -204,6 +206,185 @@ describe("end-to-end verification", () => {
 				resolve(root, "packages/demo/svelte.config.js"),
 			).text();
 			expect(config).toContain("adapter-static");
+		});
+	});
+
+	describe("cross-workspace integration", () => {
+		it("demo vite config aliases ztext to workspace source", async () => {
+			const config = await Bun.file(
+				resolve(root, "packages/demo/vite.config.ts"),
+			).text();
+			expect(config).toContain("ztext");
+			expect(config).toContain("../ztext/src/index.ts");
+		});
+
+		it("demo build bundles ztext library code", () => {
+			const dirs = [
+				resolve(demoBuild, "_app/immutable/nodes"),
+				resolve(demoBuild, "_app/immutable/chunks"),
+			];
+			let allJs = "";
+			for (const dir of dirs) {
+				if (!existsSync(dir)) continue;
+				for (const f of readdirSync(dir).filter((f) => f.endsWith(".js"))) {
+					allJs += readFileSync(resolve(dir, f), "utf-8") + "\n";
+				}
+			}
+			// ztext creates z-text and z-layers spans — these strings should appear in bundled output
+			expect(allJs).toContain("z-text");
+			expect(allJs).toContain("z-layer");
+		});
+
+		it("demo pre-rendered HTML contains data-z attributes from ztext", async () => {
+			const html = await demoBuildHtml();
+			expect(html).toContain("data-z");
+		});
+	});
+
+	describe("build artifact integrity", () => {
+		it("sourcemap is valid JSON", async () => {
+			const map = await Bun.file(
+				resolve(ztextDist, "ztext.js.map"),
+			).json();
+			expect(map.version).toBe(3);
+			expect(map.sources).toBeDefined();
+			expect(Array.isArray(map.sources)).toBe(true);
+			expect(map.mappings).toBeDefined();
+		});
+
+		it("sourcemap references original source file", async () => {
+			const map = await Bun.file(
+				resolve(ztextDist, "ztext.js.map"),
+			).json();
+			const hasSource = map.sources.some((s: string) =>
+				s.includes("index.ts"),
+			);
+			expect(hasSource).toBe(true);
+		});
+
+		it("built JS is minified (few newlines relative to size)", async () => {
+			const content = await Bun.file(
+				resolve(ztextDist, "ztext.js"),
+			).text();
+			const lines = content.split("\n");
+			// Banner takes ~4 lines, code should be 1-2 lines when minified
+			expect(lines.length).toBeLessThan(10);
+		});
+
+		it("type declarations have proper export syntax", async () => {
+			const dts = await Bun.file(
+				resolve(ztextDist, "index.d.ts"),
+			).text();
+			expect(dts).toContain("export");
+			expect(dts).toContain("interface ZtextOptions");
+			expect(dts).toContain("class Ztextify");
+		});
+
+		it("all demo CSS assets are non-empty", () => {
+			const assetsDir = resolve(demoBuild, "_app/immutable/assets");
+			const cssFiles = readdirSync(assetsDir).filter((f) =>
+				f.endsWith(".css"),
+			);
+			for (const f of cssFiles) {
+				const stat = statSync(resolve(assetsDir, f));
+				expect(stat.size).toBeGreaterThan(0);
+			}
+		});
+
+		it("all demo JS chunks are non-empty", () => {
+			const chunksDir = resolve(demoBuild, "_app/immutable/chunks");
+			const jsFiles = readdirSync(chunksDir).filter((f) =>
+				f.endsWith(".js"),
+			);
+			for (const f of jsFiles) {
+				const stat = statSync(resolve(chunksDir, f));
+				expect(stat.size).toBeGreaterThan(0);
+			}
+		});
+	});
+
+	describe("runtime module verification", () => {
+		it("Ztextify has a destroy method on prototype", async () => {
+			const mod = await import(resolve(ztextDist, "ztext.js"));
+			expect(typeof mod.Ztextify.prototype.destroy).toBe("function");
+		});
+
+		it("module has exactly three named exports", async () => {
+			const mod = await import(resolve(ztextDist, "ztext.js"));
+			const keys = Object.keys(mod).sort();
+			expect(keys).toEqual(["Ztextify", "default", "init"]);
+		});
+	});
+
+	describe("demo content verification", () => {
+		it("pre-rendered HTML has all page sections", async () => {
+			const html = await demoBuildHtml();
+			expect(html).toContain('id="header"');
+			expect(html).toContain('id="download"');
+			expect(html).toContain('id="initialization"');
+			expect(html).toContain('id="styling"');
+			expect(html).toContain('id="options"');
+		});
+
+		it("pre-rendered HTML has header letters for z-t-e-x-t-.-j-s", async () => {
+			const html = await demoBuildHtml();
+			for (const letter of ["z", "t", "e", "x", "t", ".", "j", "s"]) {
+				expect(html).toContain(`<span data-z="">${letter}</span>`);
+			}
+		});
+
+		it("pre-rendered HTML has option demo sections", async () => {
+			const html = await demoBuildHtml();
+			const options = [
+				"depth",
+				"layers",
+				"perspective",
+				"fade",
+				"direction",
+				"event",
+				"eventRotation",
+				"eventDirection",
+			];
+			for (const opt of options) {
+				expect(html).toContain(opt);
+			}
+		});
+
+		it("pre-rendered HTML has footer with copyright", async () => {
+			const html = await demoBuildHtml();
+			expect(html).toContain("footer");
+			expect(html).toContain("©");
+		});
+
+		it("all modulepreload assets exist on disk", async () => {
+			const html = await demoBuildHtml();
+			const hrefs: string[] = [];
+			const re = /href="([^"]+)"[^>]*rel="modulepreload"|rel="modulepreload"[^>]*href="([^"]+)"/g;
+			let match;
+			while ((match = re.exec(html)) !== null) {
+				hrefs.push(match[1] || match[2]);
+			}
+			expect(hrefs.length).toBeGreaterThan(0);
+			for (const href of hrefs) {
+				const filePath = resolve(demoBuild, href.replace(/^\.\//, ""));
+				expect(existsSync(filePath)).toBe(true);
+			}
+		});
+
+		it("all local stylesheet assets exist on disk", async () => {
+			const html = await demoBuildHtml();
+			const hrefs: string[] = [];
+			const re = /href="([^"]+)"[^>]*rel="stylesheet"|rel="stylesheet"[^>]*href="([^"]+)"/g;
+			let match;
+			while ((match = re.exec(html)) !== null) {
+				const href = match[1] || match[2];
+				if (!href.startsWith("http")) hrefs.push(href);
+			}
+			expect(hrefs.length).toBeGreaterThan(0);
+			for (const href of hrefs) {
+				const filePath = resolve(demoBuild, href.replace(/^\.\//, ""));
+				expect(existsSync(filePath)).toBe(true);
+			}
 		});
 	});
 });
