@@ -1,19 +1,11 @@
-import { describe, expect, test, beforeAll } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { readFileSync, existsSync, readdirSync } from "fs";
-import { join, resolve } from "path";
-import { $ } from "bun";
+import { join } from "path";
 
 const buildDir = join(import.meta.dir, "..", "build");
-const demoRoot = join(import.meta.dir, "..");
 
-let html: string;
-
-beforeAll(async () => {
-	// Build first, then read the fresh output
-	// nothrow() because Svelte a11y warnings cause non-zero exit
-	await $`cd ${demoRoot} && bun run build`.nothrow().quiet();
-	html = readFileSync(join(buildDir, "index.html"), "utf-8");
-}, 30_000);
+// Build output is produced by `bun run build` before tests run (see package.json "test" script)
+const html = readFileSync(join(buildDir, "index.html"), "utf-8");
 
 describe("SvelteKit build succeeds", () => {
 	test("build directory exists after build", () => {
