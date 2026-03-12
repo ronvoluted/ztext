@@ -1,0 +1,2 @@
+[test]
+preload = ["./packages/ztext/happydom.ts"]
