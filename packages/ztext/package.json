@@ -1,0 +1,17 @@
+{
+  "name": "ztext",
+  "version": "1.0.1",
+  "type": "module",
+  "main": "dist/ztext.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "bun run scripts/build.ts",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@happy-dom/global-registrator": "^20.8.3",
+    "@types/bun": "^1.3.10",
+    "happy-dom": "^20.8.3",
+    "typescript": "5.6"
+  }
+}

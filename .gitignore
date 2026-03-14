@@ -1,6 +1,21 @@
+# OS
 .DS_Store
-.sass-cache
-.sass-cache/*
 .Trashes
+
+# Dependencies
 node_modules
+package-lock.json
+
+# Build output
+dist
+.svelte-kit
+packages/demo/build
+
+# Cache
+.sass-cache
+
+# Logs
 npm-debug.log
+
+# IDE / Tools
+.claude
